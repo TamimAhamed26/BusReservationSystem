@@ -6,6 +6,6 @@ namespace Application.Contracts.DTOs
         public string SeatNumber { get; set; } = string.Empty;
         public int Row { get; set; }
         public int Column { get; set; }
-        public string Status { get; set; } = string.Empty; // "Available", "Booked", "Sold"
+        public string Status { get; set; } = string.Empty; 
     }
 }

@@ -65,32 +65,22 @@ namespace Infrastructure.Seed
             context.SaveChanges();
         }
 
-        /// <summary>
+      
         /// Helper method to generate a standard 40-seat (10x4) layout.
-        /// </summary>
+       
         private static List<Seat> GenerateSeatsForSchedule(Guid scheduleId, int totalSeats)
         {
             var seats = new List<Seat>();
-            // Assuming 10 rows, 4 columns
             for (int i = 0; i < totalSeats; i++)
             {
-                int row = i / 4; // 0-9
-                int col = i % 4; // 0-3
+                int row = i / 4;
+                int col = i % 4;
+                string seatNumber = $"{(char)('A' + row)}{col + 1}";
 
-                // Generates A1, A2, A3, A4, B1, B2...
-                string seatNumber = $"{(char)('A' + row)}{col + 1}"; 
-
-                seats.Add(new Seat
-                {
-                    Id = Guid.NewGuid(),
-                    SeatNumber = seatNumber,
-                    Row = row + 1, 
-                    Column = col + 1, 
-                    Status = SeatStatus.Available,
-                    BusScheduleId = scheduleId
-                });
+                seats.Add(new Seat(seatNumber, row + 1, col + 1, scheduleId, SeatStatus.Available));
             }
             return seats;
         }
+
     }
 }

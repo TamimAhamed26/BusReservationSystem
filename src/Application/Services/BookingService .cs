@@ -55,58 +55,69 @@ namespace Application.Services
         // ---- Book Seat ----
         public async Task<BookSeatResultDto> BookSeatAsync(BookSeatInputDto input)
         {
-            // 1. Validate seat
-            var seat = await _seatRepository.GetByIdAsync(input.SeatId);
-            if (seat == null)
-                return new BookSeatResultDto { Success = false, Message = "Seat not found." };
+            if (input.SeatIds == null || input.SeatIds.Count == 0)
+                return new BookSeatResultDto { Success = false, Message = "No seat selected for booking." };
+
+            var bookedSeats = new List<string>();
+            Passenger? passenger = await _bookingRepository.FindPassengerByMobileAsync(input.PassengerMobile);
+
+            if (passenger == null)
+            {
+                passenger = new Passenger
+                {
+                    Id = Guid.NewGuid(),
+                    Name = input.PassengerName,
+                    Mobile = input.PassengerMobile
+                };
+                await _bookingRepository.AddPassengerAsync(passenger);
+            }
 
             try
             {
-                // 2. Use domain logic to book
-                seat.Book();
-
-                // 3. Find or create passenger
-                var passenger = await _bookingRepository.FindPassengerByMobileAsync(input.PassengerMobile);
-                if (passenger == null)
+                foreach (var seatId in input.SeatIds)
                 {
-                    passenger = new Passenger
+                    var seat = await _seatRepository.GetByIdAsync(seatId);
+                    if (seat == null)
+                        throw new InvalidOperationException($"Seat not found (ID: {seatId}).");
+
+                    seat.Book();
+
+                    var ticket = new Ticket
                     {
                         Id = Guid.NewGuid(),
-                        Name = input.PassengerName,
-                        Mobile = input.PassengerMobile
+                        PassengerId = passenger.Id,
+                        SeatId = seat.Id,
+                        BookingDate = DateTime.UtcNow,
+                        BoardingPoint = input.BoardingPoint,
+                        DroppingPoint = input.DroppingPoint
                     };
-                    await _bookingRepository.AddPassengerAsync(passenger);
+
+                    seat.Ticket = ticket;
+                    await _bookingRepository.AddTicketAsync(ticket);
+                    await _seatRepository.UpdateAsync(seat);
+
+                    bookedSeats.Add(seat.SeatNumber);
                 }
 
-                // 4. Create ticket
-                var ticket = new Ticket
+                // Commit once for all bookings
+                await _unitOfWork.SaveChangesAsync();
+
+                if (input.ConfirmAndSell)
                 {
-                    Id = Guid.NewGuid(),
-                    PassengerId = passenger.Id,
-                    SeatId = seat.Id,
-                    BookingDate = DateTime.UtcNow,
-                    BoardingPoint = input.BoardingPoint,
-                    DroppingPoint = input.DroppingPoint
-                };
-                seat.Ticket = ticket;
-
-                await _bookingRepository.AddTicketAsync(ticket);
-                await _seatRepository.UpdateAsync(seat);
-
-                // 5. Commit transaction
-                await _unitOfWork.SaveChangesAsync();
-
-                // 6. Optionally mark sold (e.g., confirmed payment)
-                seat.MakeSold();
-                await _seatRepository.UpdateAsync(seat);
-                await _unitOfWork.SaveChangesAsync();
+                    // mark all as sold
+                    foreach (var seatId in input.SeatIds)
+                    {
+                        var seat = await _seatRepository.GetByIdAsync(seatId);
+                        seat?.MakeSold();
+                        if (seat != null) await _seatRepository.UpdateAsync(seat);
+                    }
+                    await _unitOfWork.SaveChangesAsync();
+                }
 
                 return new BookSeatResultDto
                 {
                     Success = true,
-                    Message = $"Seat {seat.SeatNumber} booked successfully!",
-                    TicketId = ticket.Id,
-                    SeatNumber = seat.SeatNumber,
+                    Message = $"Seats booked successfully: {string.Join(", ", bookedSeats)}",
                     PassengerName = passenger.Name
                 };
             }
@@ -115,5 +126,6 @@ namespace Application.Services
                 return new BookSeatResultDto { Success = false, Message = ex.Message };
             }
         }
+
     }
 }

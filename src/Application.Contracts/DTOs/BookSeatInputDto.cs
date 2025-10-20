@@ -5,7 +5,6 @@ namespace Application.Contracts.DTOs
         public Guid BusScheduleId { get; set; }
         public List<Guid> SeatIds { get; set; } = new List<Guid>();
 
-        // passenger info (for simplicity single passenger per seat in this DTO)
         public string PassengerName { get; set; } = string.Empty;
         public string PassengerMobile { get; set; } = string.Empty;
 
