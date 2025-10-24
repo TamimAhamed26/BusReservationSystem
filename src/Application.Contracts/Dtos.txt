@@ -1,0 +1,227 @@
+using Application.Contracts.DTOs;
+using Application.Interfaces;
+using Microsoft.AspNetCore.Mvc;
+
+namespace WebApi.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class BookingController : ControllerBase
+    {
+        private readonly IBookingService _bookingService;
+
+        public BookingController(IBookingService bookingService)
+        {
+            _bookingService = bookingService;
+        }
+
+        /// <summary>
+        /// Get seat plan layout for a given bus schedule.
+        /// </summary>
+        [HttpGet("seatplan/{busScheduleId}")]
+        public async Task<IActionResult> GetSeatPlan(Guid busScheduleId)
+        {
+            try
+            {
+                var result = await _bookingService.GetSeatPlanAsync(busScheduleId);
+                return Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Book a seat for a given schedule.
+        /// </summary>
+        [HttpPost("book")]
+        public async Task<IActionResult> BookSeat([FromBody] BookSeatInputDto input)
+        {
+            if (input == null)
+                return BadRequest("Booking details are required.");
+
+            var result = await _bookingService.BookSeatAsync(input);
+
+            if (!result.Success)
+                return BadRequest(result);
+
+            return Ok(result);
+        }
+    }
+}
+
+using Application.Interfaces;
+using Microsoft.AspNetCore.Mvc;
+
+namespace WebApi.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class SearchController : ControllerBase
+    {
+        private readonly ISearchService _searchService;
+
+        public SearchController(ISearchService searchService)
+        {
+            _searchService = searchService;
+        }
+
+        /// <summary>
+        /// Search available buses by route and journey date.
+        /// </summary>
+        [HttpGet("available")]
+        public async Task<IActionResult> GetAvailableBuses(
+            [FromQuery] string from,
+            [FromQuery] string to,
+            [FromQuery] DateTime journeyDate)
+        {
+            if (string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(to))
+                return BadRequest("Both 'from' and 'to' must be provided.");
+
+            var result = await _searchService.SearchAvailableBusesAsync(from, to, journeyDate);
+            if (result == null || !result.Any())
+                return NotFound("No buses found for the given criteria.");
+
+            return Ok(result);
+        }
+    }
+}
+
+namespace Application.Contracts.DTOs
+{
+    public class AvailableBusDto
+    {
+        public Guid BusScheduleId { get; set; }
+        public string CompanyName { get; set; } = string.Empty;
+        public string BusName { get; set; } = string.Empty;
+        public TimeSpan StartTime { get; set; }
+        public TimeSpan ArrivalTime { get; set; }
+        public int SeatsLeft { get; set; }
+        public decimal Price { get; set; }
+        public string FromCity { get; set; } = string.Empty;
+        public string ToCity { get; set; } = string.Empty;
+        public DateTime JourneyDate { get; set; }
+    }
+}
+namespace Application.Contracts.DTOs
+{
+    public class SeatDto
+    {
+        public Guid SeatId { get; set; }
+        public string SeatNumber { get; set; } = string.Empty;
+        public int Row { get; set; }
+        public int Column { get; set; }
+        public string Status { get; set; } = string.Empty; 
+    }
+}
+
+namespace Application.Contracts.DTOs
+{
+    public class BookSeatResultDto
+    {
+
+        public bool Success { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public Guid? TicketId { get; set; }
+        public string SeatNumber { get; set; } = string.Empty;
+        public string PassengerName { get; set; } = string.Empty;
+    }
+}
+namespace Application.Contracts.DTOs
+{
+    public class SeatPlanDto
+    {
+        public Guid BusScheduleId { get; set; }
+        public string BusName { get; set; } = string.Empty;
+        public string CompanyName { get; set; } = string.Empty;
+        public string FromCity { get; set; } = string.Empty;
+        public string ToCity { get; set; } = string.Empty;
+        public DateTime JourneyDate { get; set; }
+
+        public List<SeatDto> Seats { get; set; } = new();
+    }
+}
+
+namespace Application.Contracts.DTOs
+{
+    public class BookSeatInputDto
+    {
+        public Guid BusScheduleId { get; set; }
+        public List<Guid> SeatIds { get; set; } = new List<Guid>();
+
+        public string PassengerName { get; set; } = string.Empty;
+        public string PassengerMobile { get; set; } = string.Empty;
+
+        public string BoardingPoint { get; set; } = string.Empty;
+        public string DroppingPoint { get; set; } = string.Empty;
+
+        // whether to mark final (Sold) or keep as Booked
+        public bool ConfirmAndSell { get; set; } = true;
+    }
+}
+
+@WebApi_HostAddress = http://localhost:5294
+
+GET {{WebApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
+using Infrastructure.Persistence;
+using Infrastructure;
+using Infrastructure.Seed;
+using Microsoft.EntityFrameworkCore;
+using Application;
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+builder.Services.AddApplicationServices();
+builder.Services.AddInfrastructure(builder.Configuration);
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAngularClient",
+        policy => policy
+            .WithOrigins("http://localhost:4200")
+            .AllowAnyHeader()
+            .AllowAnyMethod());
+});
+
+var app = builder.Build();
+
+app.UseCors("AllowAngularClient");
+
+
+
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+
+    using var scope = app.Services.CreateScope();
+    var services = scope.ServiceProvider;
+    try
+    {
+        var context = services.GetRequiredService<AppDbContext>();
+        context.Database.Migrate();
+        DbInitializer.Seed(context);
+    }
+    catch (Exception ex)
+    {
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "An error occurred while migrating or seeding the DB.");
+    }
+}
+
+app.UseHttpsRedirection();
+
+app.UseCors("AllowAngular");
+
+app.UseAuthorization();
+app.MapControllers();
+app.Run();

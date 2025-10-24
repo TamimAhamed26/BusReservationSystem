@@ -25,7 +25,7 @@ namespace Infrastructure.Seed
             var busHanif = new Bus { Id = Guid.NewGuid(), CompanyName = "Hanif Enterprise", BusName = "68-RAJ-CHAPA (NON AC)", TotalSeats = 40 };
 
             // 3. Schedules (using a date from the UI)
-            var journeyDate = new DateTime(2025, 10, 23);
+            var journeyDate = new DateTime(2025, 10, 25);
 
             var scheduleNational = new BusSchedule
             {
